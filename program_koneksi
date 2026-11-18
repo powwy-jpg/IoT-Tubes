@@ -1,0 +1,94 @@
+#define BLYNK_TEMPLATE_ID "TMPL658PvFG_I"
+#define BLYNK_TEMPLATE_NAME "Tubes IoT"
+#define BLYNK_AUTH_TOKEN "eDNRqPRckCKu7jJkjxw2jorI2f4t-5Q-"
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Kredensial WiFi (2.4GHz)
+char ssid[] = "vivo V25e";
+char pass[] = "11111111";
+
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define MQ135_PIN 34  // WAJIB pindah kabel AO dari D4 ke D34 (ADC1) agar jalan saat WiFi aktif
+
+const float RL = 10.0;
+const float R0 = 76.63;
+const float PARA = 116.6020682;
+const float PARB = 2.769034857;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+BlynkTimer timer;
+
+void kirimDataSensor() {
+  int rawValue = analogRead(MQ135_PIN);
+  float voltage = rawValue * (3.3 / 4095.0);
+  float ppm = 0.0;
+
+  if (voltage > 0.01) {
+    float rs = ((5.0 - voltage) / voltage) * RL;
+    float ratio = rs / R0;
+    ppm = PARA * pow(ratio, -PARB);
+  }
+
+  // Kirim data PPM ke Virtual Pin V1
+  Blynk.virtualWrite(V1, ppm);
+
+  // Tampilkan di Serial Monitor
+  Serial.print("Raw: ");
+  Serial.print(rawValue);
+  Serial.print(" | PPM: ");
+  Serial.print(ppm, 1);
+  Serial.print(" | Blynk: ");
+  Serial.println(Blynk.connected() ? "OK" : "PUTUS");
+
+  // Tampilkan di LCD 16x2
+  lcd.setCursor(0, 0);
+  lcd.print("Raw: ");
+  lcd.print(rawValue);
+  lcd.print("    ");
+
+  lcd.setCursor(14, 0);
+  lcd.print(Blynk.connected() ? "ON" : "NO");
+
+  lcd.setCursor(0, 1);
+  lcd.print("PPM: ");
+  lcd.print(ppm, 1);
+  lcd.print("    ");
+}
+
+void setup() {
+  Serial.begin(115200);
+  analogReadResolution(12);
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Konek WiFi &");
+  lcd.setCursor(0, 1);
+  lcd.print("Blynk...");
+
+  // Hubungkan ke WiFi & Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Blynk Terhubung!");
+  delay(1000);
+  lcd.clear();
+
+  // Kirim data setiap 1 detik tanpa mengganggu koneksi Blynk
+  timer.setInterval(1000L, kirimDataSensor);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
