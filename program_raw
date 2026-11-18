@@ -1,0 +1,57 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define MQ135_PIN 4  // Change to 34 or 35 on standard esp32dev (GPIO 16 has no ADC)
+
+const float RL = 10.0;
+const float R0 = 76.63;
+const float PARA = 116.6020682;
+const float PARB = 2.769034857;
+
+// Common I2C LCD addresses are 0x27 or 0x3F
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  Serial.begin(115200);
+  analogReadResolution(12);
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("MQ135 Sensor...");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  int rawValue = analogRead(MQ135_PIN);
+  float voltage = rawValue * (3.3 / 4095.0);
+  float ppm = 0.0;
+
+  if (voltage > 0.01) {
+    float rs = ((5.0 - voltage) / voltage) * RL;
+    float ratio = rs / R0;
+    ppm = PARA * pow(ratio, -PARB);
+  }
+
+  Serial.print("Raw: ");
+  Serial.print(rawValue);
+  Serial.print(" | PPM: ");
+  Serial.println(ppm, 1);
+
+  lcd.setCursor(0, 0);
+  lcd.print("Raw: ");
+  lcd.print(rawValue);
+  lcd.print("    "); // Clear trailing digits
+
+  lcd.setCursor(0, 1);
+  lcd.print("PPM: ");
+  lcd.print(ppm, 1);
+  lcd.print("    ");
+
+  delay(1000);
+}
